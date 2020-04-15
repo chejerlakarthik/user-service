@@ -45,6 +45,7 @@ dependencies {
 sonarqube {
 	properties {
 		property("sonar.host.url", "https://sonarcloud.io")
+		property("sonar.organization", "chejerlakarthik-github")
 		property("sonar.projectName", "user-service")
 		property("sonar.projectKey", "chejerlakarthik_user-service")
 		property("sonar.projectVersion", "1.0")
@@ -60,7 +61,7 @@ jacoco {
 
 tasks.jacocoTestReport {
 	reports {
-		xml.isEnabled = false
+		xml.isEnabled = true
 		csv.isEnabled = false
 		html.destination = file("${buildDir}/jacocoHtml")
 	}
