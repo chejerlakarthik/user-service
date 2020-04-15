@@ -26,7 +26,6 @@ class UserHandler(private val userRepository: UserRepository) {
         return ServerResponse.ok().body(userRepository.findUserById(userId))
     }
 
-    private fun extractEntity(request: ServerRequest, clazz: Class<User>) =
-            request.bodyToMono(clazz)
+    private fun extractEntity(request: ServerRequest, clazz: Class<User>) = request.bodyToMono(clazz)
 
 }

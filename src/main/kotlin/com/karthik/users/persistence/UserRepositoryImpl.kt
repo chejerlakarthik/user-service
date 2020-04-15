@@ -5,6 +5,8 @@ import com.karthik.users.persistence.AttributeValueBuilders.string
 import com.karthik.users.persistence.DynamoRequestBuilders.getRequest
 import com.karthik.users.persistence.DynamoRequestBuilders.putRequest
 import com.karthik.users.persistence.TableNames.users
+import com.karthik.users.persistence.UserMapper.fromDynamoItem
+import com.karthik.users.persistence.UserMapper.toDynamoItem
 import com.karthik.users.persistence.UserTableFields.FIRST_NAME
 import com.karthik.users.persistence.UserTableFields.ID
 import com.karthik.users.persistence.UserTableFields.LAST_NAME
@@ -21,17 +23,17 @@ import software.amazon.awssdk.services.dynamodb.model.AttributeValue
 import software.amazon.awssdk.services.dynamodb.model.GetItemRequest
 import software.amazon.awssdk.services.dynamodb.model.ScanRequest
 import software.amazon.awssdk.services.dynamodb.model.ScanResponse
-import java.util.stream.Collectors
+import java.util.stream.Collectors.toList
 
 @Repository
 class UserRepositoryImpl(val dbClient: DBClient) : UserRepository {
 
     override fun addUser(user: User): Mono<User> {
 
-        val putItemRequest = putRequest(users, UserMapper.toDynamoItem(user))
+        val putItemRequest = putRequest(users, toDynamoItem(user))
         val getItemRequest = getRequest(users, mapOf(ID to string(user.id)))
 
-        return Mono.fromCompletionStage(
+        return Mono.fromFuture(
                 dbClient.getClient()
                         .putItem(putItemRequest)
                         .thenComposeAsync { retrieveUser(getItemRequest) }
@@ -41,27 +43,35 @@ class UserRepositoryImpl(val dbClient: DBClient) : UserRepository {
     private fun retrieveUser(getItemRequest: GetItemRequest) =
             dbClient.getClient()
                     .getItem(getItemRequest)
-                    .thenApplyAsync { UserMapper.fromDynamoItem(it.item()) }
+                    .thenApplyAsync { fromDynamoItem(it.item()) }
+
 
     override fun findAllUsers(): Flux<User> {
-
         return Mono.fromFuture { scanForAllUsers().thenApplyAsync { fromScanResponseToList(it) } }
                    .flatMapIterable { it }
     }
 
-    private fun scanForAllUsers() =
-            dbClient.getClient().scan(ScanRequest.builder().tableName(TableNames.users).limit(10).build())
+    private fun scanForAllUsers(maxResults: Int = 10) =
+            dbClient.getClient()
+                    .scan(
+                        ScanRequest
+                            .builder()
+                            .tableName(users)
+                            .limit(maxResults)
+                            .build()
+                    )
 
     private fun fromScanResponseToList(response: ScanResponse) =
-            response.items().stream().map { x -> UserMapper.fromDynamoItem(x) }.collect(Collectors.toList())
+            response.items()
+                    .stream()
+                    .map { fromDynamoItem(it) }
+                    .collect(toList())
 
     override fun findUserById(userId: String): Mono<User> {
         val getItemRequest = getRequest(users, mapOf(ID to string(userId)))
 
         return Mono.fromCompletionStage(
-                dbClient.getClient()
-                        .getItem(getItemRequest)
-                        .thenApplyAsync { UserMapper.fromDynamoItem(it.item()) }
+                retrieveUser(getItemRequest)
         )
     }
 
@@ -104,7 +114,7 @@ class DBClient {
 
     fun getClient(): DynamoDbAsyncClient {
         return DynamoDbAsyncClient.builder()
-                .region(Region.AP_SOUTHEAST_2)
+                .region(Region.US_EAST_1)
                 .credentialsProvider(
                         StaticCredentialsProvider.create(AwsBasicCredentials.create(accessKeyId, secretAccessKey))
                 )
